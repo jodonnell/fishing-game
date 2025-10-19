@@ -1,0 +1,27 @@
+{
+  "name": "noname",
+  "version": "0.0.1",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js test",
+    "prettier": "prettier -w src/**/*.js *.js test/**/*.js",
+    "lint": "eslint src/**/*.js test/**/*.js",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "deploy": "scripts/deploy.sh"
+  },
+  "type": "module",
+  "author": "Jacob",
+  "license": "ISC",
+  "dependencies": {
+    "pixi.js": "^8.9.2"
+  },
+  "devDependencies": {
+    "eslint": "^9.26.0",
+    "jest": "^29.7.0",
+    "prettier": "^3.5.3",
+    "vite": "^6.3.5"
+  }
+}
