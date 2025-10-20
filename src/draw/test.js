@@ -1,4 +1,12 @@
-import { Application, Assets, Sprite, Graphics } from "pixi.js"
+import {
+  Application,
+  Assets,
+  Sprite,
+  Graphics,
+  MeshRope,
+  Texture,
+  Point,
+} from "pixi.js"
 import fontUrl from "@/assets/fonts/OpenSans-Medium.ttf?url"
 import bootImageUrl from "@/assets/images/boot.png?url"
 import fishImageUrl from "@/assets/images/fish.png?url"
@@ -54,6 +62,7 @@ const randomBetween = (min, max) => min + Math.random() * (max - min)
 
 const addLoadedImages = (app, imageUrls) => {
   const underwaterSprites = []
+  let boatSprite = null
   const placedPositions = []
   const renderer = app.renderer
   const width = renderer.width
@@ -75,6 +84,8 @@ const addLoadedImages = (app, imageUrls) => {
     if (aboveWater && anchor) {
       spriteX = anchor.x
       spriteY = anchor.y
+      boatSprite = sprite
+      sprite.zIndex = 40
     } else {
       let attempts = 0
       let found = false
@@ -111,10 +122,12 @@ const addLoadedImages = (app, imageUrls) => {
       sprite.wavePhase = index * UNDERWATER_PHASE_OFFSET
       underwaterSprites.push(sprite)
     }
-    app.stage.addChild(sprite)
+    if (!aboveWater) {
+      app.stage.addChild(sprite)
+    }
   })
 
-  return { underwaterSprites }
+  return { underwaterSprites, boatSprite }
 }
 
 const drawBackground = (app) => {
@@ -224,6 +237,44 @@ const animateWater = (app, overlay, underwaterSprites) => {
   })
 }
 
+const createFishingLine = (app, boatSprite) => {
+  if (!boatSprite) return null
+
+  const ropePoints = [
+    new Point(0, 0),
+    new Point(-2, 48),
+    new Point(-3, 108),
+    new Point(-3, 168),
+    new Point(-2, 228),
+    new Point(-1, 288),
+    new Point(0, 336),
+  ]
+
+  const rope = new MeshRope({
+    texture: Texture.WHITE,
+    points: ropePoints,
+  })
+  rope.tint = 0xf7f7f7
+  rope.alpha = 0.8
+  rope.zIndex = (boatSprite.zIndex ?? 0) - 1
+  rope.eventMode = "none"
+
+  const updatePosition = () => {
+    const offsetX = boatSprite.width * 0.305
+    const offsetY = boatSprite.height * 0.02
+    rope.position.set(boatSprite.x - offsetX, boatSprite.y + offsetY)
+  }
+
+  updatePosition()
+  app.stage.addChild(rope)
+
+  if (app.renderer?.events?.on) {
+    app.renderer.events.on("resize", updatePosition)
+  }
+
+  return rope
+}
+
 const animateClouds = (app, clouds) => {
   app.ticker.add((ticker) => {
     const delta = ticker.deltaMS
@@ -247,7 +298,11 @@ export const test = async () => {
 
   drawBackground(app)
   const clouds = drawClouds(app)
-  const { underwaterSprites } = addLoadedImages(app, imageUrls)
+  const { underwaterSprites, boatSprite } = addLoadedImages(app, imageUrls)
+  const fishingLine = createFishingLine(app, boatSprite)
+  if (boatSprite) {
+    app.stage.addChild(boatSprite)
+  }
   const waterOverlay = drawWaterOverlay(app)
   animateWater(app, waterOverlay, underwaterSprites)
   animateClouds(app, clouds)
