@@ -260,15 +260,16 @@ const createFishingLine = (app, boatSprite, hookSprite) => {
   hook.anchor.set(0.5, 0)
   hook.eventMode = "none"
 
-  const ropePoints = [
-    new Point(0, 0),
-    new Point(-2, 48),
-    new Point(-3, 108),
-    new Point(-3, 168),
-    new Point(-2, 228),
-    new Point(-1, 288),
-    new Point(0, 336),
+  const basePoints = [
+    { x: 0, y: 0 },
+    { x: -2, y: 48 },
+    { x: -3, y: 108 },
+    { x: -3, y: 168 },
+    { x: -2, y: 228 },
+    { x: -1, y: 288 },
+    { x: 0, y: 336 },
   ]
+  const ropePoints = basePoints.map(({ x, y }) => new Point(x, y))
 
   const rope = new MeshRope({
     texture: Texture.WHITE,
@@ -279,10 +280,7 @@ const createFishingLine = (app, boatSprite, hookSprite) => {
   rope.zIndex = (boatSprite.zIndex ?? 0) - 1
   rope.eventMode = "none"
 
-  const updatePosition = () => {
-    const offsetX = boatSprite.width * 0.305
-    const offsetY = boatSprite.height * 0.02
-    rope.position.set(boatSprite.x - offsetX, boatSprite.y + offsetY)
+  const updateHookTint = () => {
     const bottomPoint = ropePoints[ropePoints.length - 1]
     hook.x = rope.position.x + bottomPoint.x
     hook.y = rope.position.y + bottomPoint.y
@@ -295,6 +293,13 @@ const createFishingLine = (app, boatSprite, hookSprite) => {
     }
   }
 
+  const updatePosition = () => {
+    const offsetX = boatSprite.width * 0.305
+    const offsetY = boatSprite.height * 0.02
+    rope.position.set(boatSprite.x - offsetX, boatSprite.y + offsetY)
+    updateHookTint()
+  }
+
   updatePosition()
   app.stage.addChild(rope)
   hook.zIndex = rope.zIndex + 1
@@ -304,7 +309,7 @@ const createFishingLine = (app, boatSprite, hookSprite) => {
     app.renderer.events.on("resize", updatePosition)
   }
 
-  return { rope, hook }
+  return { rope, hook, basePoints, ropePoints, updateHookTint, updatePosition }
 }
 
 const animateClouds = (app, clouds) => {
@@ -330,12 +335,63 @@ export const test = async () => {
 
   drawBackground(app)
   const clouds = drawClouds(app)
-  const { underwaterSprites, boatSprite, hookSprite } = addLoadedImages(app, imageUrls)
-  createFishingLine(app, boatSprite, hookSprite)
+  const { underwaterSprites, boatSprite, hookSprite } = addLoadedImages(
+    app,
+    imageUrls,
+  )
+  const fishingLine = createFishingLine(app, boatSprite, hookSprite)
+  setupFishingLineControls(app, fishingLine)
   if (boatSprite) {
     app.stage.addChild(boatSprite)
   }
   const waterOverlay = drawWaterOverlay(app)
   animateWater(app, waterOverlay, underwaterSprites)
   animateClouds(app, clouds)
+}
+const setupFishingLineControls = (app, fishingLineData) => {
+  if (!fishingLineData) return
+
+  const { rope, hook, basePoints, ropePoints, updateHookTint, updatePosition } =
+    fishingLineData
+  if (!rope || !hook) return
+
+  let reelFactor = 1
+  const minFactor = 0.35
+  const reelSpeed = 0.006
+  const releaseSpeed = 0.004
+  let reeling = false
+
+  const applyRopeScale = () => {
+    for (let i = 1; i < ropePoints.length; i += 1) {
+      ropePoints[i].y = basePoints[i].y * reelFactor
+    }
+    updateHookTint()
+  }
+
+  const onKeyDown = (event) => {
+    if (event.code === "Space") {
+      reeling = true
+      event.preventDefault()
+    }
+  }
+
+  const onKeyUp = (event) => {
+    if (event.code === "Space") {
+      reeling = false
+      event.preventDefault()
+    }
+  }
+
+  window.addEventListener("keydown", onKeyDown)
+  window.addEventListener("keyup", onKeyUp)
+
+  app.ticker.add((ticker) => {
+    const deltaRatio = ticker.deltaMS / 16.67
+    const target = reeling ? minFactor : 1
+    const speed = reeling ? reelSpeed : releaseSpeed
+    reelFactor += (target - reelFactor) * speed * deltaRatio
+    reelFactor = Math.min(1, Math.max(minFactor, reelFactor))
+    applyRopeScale()
+    updatePosition()
+  })
 }
