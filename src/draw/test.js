@@ -144,7 +144,10 @@ const addLoadedImages = (app, imageUrls) => {
           verticalSpeed: randomBetween(1.2, 2.2),
           time: randomBetween(0, Math.PI * 2),
           baseScaleX,
+          baseScaleY: Math.abs(sprite.scale.y),
           horizontalMargin: 80,
+          baseTint: sprite.tint,
+          caught: false,
         })
       }
     }
@@ -355,8 +358,17 @@ const animateSwimmingFish = (app, swimmers) => {
     const lowerBand = WATERLINE_Y + 70
     const upperBand = Math.max(lowerBand + 30, height - 140)
     swimmers.forEach((swimmer) => {
+      if (swimmer.caught) return
       swimmer.time += deltaSeconds
-      const { sprite, speed, direction, amplitude, verticalSpeed, baseScaleX } =
+      const {
+        sprite,
+        speed,
+        direction,
+        amplitude,
+        verticalSpeed,
+        baseScaleX,
+        baseScaleY,
+      } =
         swimmer
       sprite.x += speed * direction * deltaSeconds
       sprite.y = sprite.baseY + Math.sin(swimmer.time * verticalSpeed) * amplitude
@@ -374,6 +386,9 @@ const animateSwimmingFish = (app, swimmers) => {
       const desiredScaleX = baseScaleX * (direction > 0 ? -1 : 1)
       if (sprite.scale.x !== desiredScaleX) {
         sprite.scale.x = desiredScaleX
+      }
+      if (sprite.scale.y !== baseScaleY) {
+        sprite.scale.y = baseScaleY
       }
     })
   })
@@ -394,7 +409,7 @@ export const test = async () => {
     imageUrls,
   )
   const fishingLine = createFishingLine(app, boatSprite, hookSprite)
-  setupFishingLineControls(app, fishingLine)
+  setupFishingLineControls(app, fishingLine, swimmingSprites)
   animateSwimmingFish(app, swimmingSprites)
   if (boatSprite) {
     app.stage.addChild(boatSprite)
@@ -403,10 +418,17 @@ export const test = async () => {
   animateWater(app, waterOverlay, underwaterSprites)
   animateClouds(app, clouds)
 }
-const setupFishingLineControls = (app, fishingLineData) => {
+const setupFishingLineControls = (app, fishingLineData, swimmers = []) => {
   if (!fishingLineData) return
 
-  const { rope, hook, basePoints, ropePoints, updateHookTint, updatePosition } =
+  const {
+    rope,
+    hook,
+    basePoints,
+    ropePoints,
+    updateHookTint,
+    updatePosition,
+  } =
     fishingLineData
   if (!rope || !hook) return
 
@@ -421,6 +443,21 @@ const setupFishingLineControls = (app, fishingLineData) => {
       ropePoints[i].y = basePoints[i].y * reelFactor
     }
     updateHookTint()
+  }
+
+  const placeCaughtFish = () => {
+    const swimmer = rope.caughtFish
+    if (!swimmer) return
+  const targetParent = hook.parent ?? app.stage
+  if (swimmer.sprite.parent !== targetParent) {
+    targetParent.addChild(swimmer.sprite)
+  }
+  const tailPoint = ropePoints[ropePoints.length - 1]
+  const global = rope.toGlobal(new Point(tailPoint.x, tailPoint.y))
+  swimmer.sprite.position.set(global.x, global.y)
+    swimmer.sprite.rotation = Math.PI / 2
+    swimmer.sprite.scale.set(swimmer.baseScaleX, swimmer.baseScaleY)
+    swimmer.sprite.zIndex = hook.zIndex + 1
   }
 
   const onKeyDown = (event) => {
@@ -448,5 +485,39 @@ const setupFishingLineControls = (app, fishingLineData) => {
     reelFactor = Math.min(1, Math.max(minFactor, reelFactor))
     applyRopeScale()
     updatePosition()
+    if (!rope.caughtFish) {
+      const caught = checkHookCollisions(hook, rope, swimmers, app.stage)
+      if (caught) placeCaughtFish()
+    } else {
+      placeCaughtFish()
+    }
   })
+}
+
+const checkHookCollisions = (hook, rope, swimmers, stage) => {
+  if (!hook || !swimmers?.length) return false
+  const hookRect = hook.getBounds()
+  for (const swimmer of swimmers) {
+    if (swimmer.caught) continue
+    const bounds = swimmer.sprite.getBounds()
+    const intersects =
+      bounds.x < hookRect.x + hookRect.width &&
+      bounds.x + bounds.width > hookRect.x &&
+      bounds.y < hookRect.y + hookRect.height &&
+      bounds.y + bounds.height > hookRect.y
+    if (intersects) {
+      swimmer.caught = true
+      swimmer.sprite.tint = 0xffffff
+      swimmer.sprite.alpha = 1
+      swimmer.sprite.rotation = Math.PI / 2
+      swimmer.sprite.scale.set(swimmer.baseScaleX, swimmer.baseScaleY)
+      const targetParent = stage ?? hook.parent ?? swimmer.sprite.parent
+      if (targetParent && swimmer.sprite.parent !== targetParent) {
+        targetParent.addChild(swimmer.sprite)
+      }
+      rope.caughtFish = swimmer
+      return true
+    }
+  }
+  return false
 }
