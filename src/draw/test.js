@@ -29,7 +29,7 @@ const CLOUD_DEFINITIONS = [
 
 const IMAGE_DEFINITIONS = [
   { key: "boot", url: bootImageUrl, scale: 0.085 },
-  { key: "fish", url: fishImageUrl, scale: 0.075 },
+  { key: "fish", url: fishImageUrl, scale: 0.075, swim: true },
   { key: "hook", url: hookImageUrl, scale: 0.055, followsLine: true },
   {
     key: "manFishing",
@@ -39,7 +39,7 @@ const IMAGE_DEFINITIONS = [
     scale: 0.28,
   },
   { key: "seaweed", url: seaweedImageUrl, scale: 0.075 },
-  { key: "tuna", url: tunaImageUrl, scale: 0.075 },
+  { key: "tuna", url: tunaImageUrl, scale: 0.075, swim: true },
 ]
 
 const IMAGE_URLS = IMAGE_DEFINITIONS.reduce((acc, { key, url }) => {
@@ -64,6 +64,7 @@ const addLoadedImages = (app, imageUrls) => {
   const underwaterSprites = []
   let boatSprite = null
   let hookSprite = null
+  const swimmingSprites = []
   const placedPositions = []
   const renderer = app.renderer
   const width = renderer.width
@@ -73,7 +74,8 @@ const addLoadedImages = (app, imageUrls) => {
   const verticalMax = Math.max(verticalMin + 20, height - 140)
   const minDistance = 160
 
-  IMAGE_DEFINITIONS.forEach(({ key, scale, url: assetUrl, aboveWater, anchor, followsLine }, index) => {
+  IMAGE_DEFINITIONS.forEach(
+    ({ key, scale, url: assetUrl, aboveWater, anchor, followsLine, swim }, index) => {
     const resolvedUrl = imageUrls[key] ?? assetUrl
     if (!resolvedUrl) return
 
@@ -130,13 +132,29 @@ const addLoadedImages = (app, imageUrls) => {
       sprite.baseAlpha = sprite.alpha
       sprite.wavePhase = index * UNDERWATER_PHASE_OFFSET
       underwaterSprites.push(sprite)
+      if (swim) {
+        const direction = Math.random() < 0.5 ? -1 : 1
+        const baseScaleX = Math.abs(sprite.scale.x)
+        sprite.scale.x = baseScaleX * direction
+        swimmingSprites.push({
+          sprite,
+          direction,
+          speed: randomBetween(45, 90),
+          amplitude: randomBetween(8, 18),
+          verticalSpeed: randomBetween(1.2, 2.2),
+          time: randomBetween(0, Math.PI * 2),
+          baseScaleX,
+          horizontalMargin: 80,
+        })
+      }
     }
     if (!aboveWater && !followsLine) {
       app.stage.addChild(sprite)
     }
-  })
+  },
+  )
 
-  return { underwaterSprites, boatSprite, hookSprite }
+  return { underwaterSprites, boatSprite, hookSprite, swimmingSprites }
 }
 
 const drawBackground = (app) => {
@@ -325,6 +343,42 @@ const animateClouds = (app, clouds) => {
   })
 }
 
+const animateSwimmingFish = (app, swimmers) => {
+  if (!swimmers.length) return
+
+  const stageMargin = 80
+
+  app.ticker.add((ticker) => {
+    const deltaSeconds = ticker.deltaMS / 1000
+    const width = app.renderer.width
+    const height = app.renderer.height
+    const lowerBand = WATERLINE_Y + 70
+    const upperBand = Math.max(lowerBand + 30, height - 140)
+    swimmers.forEach((swimmer) => {
+      swimmer.time += deltaSeconds
+      const { sprite, speed, direction, amplitude, verticalSpeed, baseScaleX } =
+        swimmer
+      sprite.x += speed * direction * deltaSeconds
+      sprite.y = sprite.baseY + Math.sin(swimmer.time * verticalSpeed) * amplitude
+      if (direction > 0 && sprite.x > width + stageMargin) {
+        sprite.x = -stageMargin
+        sprite.baseY = randomBetween(lowerBand, upperBand)
+        sprite.y = sprite.baseY
+        swimmer.time = randomBetween(0, Math.PI * 2)
+      } else if (direction < 0 && sprite.x < -stageMargin) {
+        sprite.x = width + stageMargin
+        sprite.baseY = randomBetween(lowerBand, upperBand)
+        sprite.y = sprite.baseY
+        swimmer.time = randomBetween(0, Math.PI * 2)
+      }
+      const desiredScaleX = baseScaleX * (direction > 0 ? -1 : 1)
+      if (sprite.scale.x !== desiredScaleX) {
+        sprite.scale.x = desiredScaleX
+      }
+    })
+  })
+}
+
 export const test = async () => {
   const app = new Application()
   await app.init({ background: "#000000", resizeTo: window })
@@ -335,12 +389,13 @@ export const test = async () => {
 
   drawBackground(app)
   const clouds = drawClouds(app)
-  const { underwaterSprites, boatSprite, hookSprite } = addLoadedImages(
+  const { underwaterSprites, boatSprite, hookSprite, swimmingSprites } = addLoadedImages(
     app,
     imageUrls,
   )
   const fishingLine = createFishingLine(app, boatSprite, hookSprite)
   setupFishingLineControls(app, fishingLine)
+  animateSwimmingFish(app, swimmingSprites)
   if (boatSprite) {
     app.stage.addChild(boatSprite)
   }
