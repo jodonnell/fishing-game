@@ -16,7 +16,7 @@ const IMAGE_DEFINITIONS = [
   {
     key: "manFishing",
     url: manFishingImageUrl,
-    position: { x: 660, y: 420 },
+    position: { x: 660, y: 150 },
     scale: 0.28,
   },
   { key: "seaweed", url: seaweedImageUrl, position: { x: 840, y: 420 }, scale: 0.075 },
