@@ -30,7 +30,7 @@ const CLOUD_DEFINITIONS = [
 const IMAGE_DEFINITIONS = [
   { key: "boot", url: bootImageUrl, scale: 0.085 },
   { key: "fish", url: fishImageUrl, scale: 0.075 },
-  { key: "hook", url: hookImageUrl, scale: 0.055 },
+  { key: "hook", url: hookImageUrl, scale: 0.055, followsLine: true },
   {
     key: "manFishing",
     url: manFishingImageUrl,
@@ -63,6 +63,7 @@ const randomBetween = (min, max) => min + Math.random() * (max - min)
 const addLoadedImages = (app, imageUrls) => {
   const underwaterSprites = []
   let boatSprite = null
+  let hookSprite = null
   const placedPositions = []
   const renderer = app.renderer
   const width = renderer.width
@@ -72,12 +73,16 @@ const addLoadedImages = (app, imageUrls) => {
   const verticalMax = Math.max(verticalMin + 20, height - 140)
   const minDistance = 160
 
-  IMAGE_DEFINITIONS.forEach(({ key, scale, url: assetUrl, aboveWater, anchor }, index) => {
+  IMAGE_DEFINITIONS.forEach(({ key, scale, url: assetUrl, aboveWater, anchor, followsLine }, index) => {
     const resolvedUrl = imageUrls[key] ?? assetUrl
     if (!resolvedUrl) return
 
     const sprite = Sprite.from(resolvedUrl)
-    sprite.anchor.set(0.5)
+    if (followsLine) {
+      sprite.anchor.set(0.5, 0)
+    } else {
+      sprite.anchor.set(0.5)
+    }
     sprite.scale.set(scale ?? DEFAULT_SCALE)
     let spriteX
     let spriteY
@@ -86,6 +91,10 @@ const addLoadedImages = (app, imageUrls) => {
       spriteY = anchor.y
       boatSprite = sprite
       sprite.zIndex = 40
+    } else if (followsLine) {
+      hookSprite = sprite
+      spriteX = 0
+      spriteY = 0
     } else {
       let attempts = 0
       let found = false
@@ -115,19 +124,19 @@ const addLoadedImages = (app, imageUrls) => {
     sprite.y = spriteY
     sprite.eventMode = "none"
     sprite.baseY = sprite.y
-    if (!aboveWater && sprite.y >= WATERLINE_Y) {
+    if (!aboveWater && !followsLine && sprite.y >= WATERLINE_Y) {
       sprite.tint = 0x6fb8ff
       sprite.alpha = 0.88
       sprite.baseAlpha = sprite.alpha
       sprite.wavePhase = index * UNDERWATER_PHASE_OFFSET
       underwaterSprites.push(sprite)
     }
-    if (!aboveWater) {
+    if (!aboveWater && !followsLine) {
       app.stage.addChild(sprite)
     }
   })
 
-  return { underwaterSprites, boatSprite }
+  return { underwaterSprites, boatSprite, hookSprite }
 }
 
 const drawBackground = (app) => {
@@ -237,8 +246,19 @@ const animateWater = (app, overlay, underwaterSprites) => {
   })
 }
 
-const createFishingLine = (app, boatSprite) => {
+const createFishingLine = (app, boatSprite, hookSprite) => {
   if (!boatSprite) return null
+
+  const hook =
+    hookSprite ??
+    (() => {
+      const sprite = Sprite.from(hookImageUrl)
+      sprite.scale.set(0.055)
+      sprite.anchor.set(0.5, 0)
+      return sprite
+    })()
+  hook.anchor.set(0.5, 0)
+  hook.eventMode = "none"
 
   const ropePoints = [
     new Point(0, 0),
@@ -263,16 +283,28 @@ const createFishingLine = (app, boatSprite) => {
     const offsetX = boatSprite.width * 0.305
     const offsetY = boatSprite.height * 0.02
     rope.position.set(boatSprite.x - offsetX, boatSprite.y + offsetY)
+    const bottomPoint = ropePoints[ropePoints.length - 1]
+    hook.x = rope.position.x + bottomPoint.x
+    hook.y = rope.position.y + bottomPoint.y
+    if (hook.y >= WATERLINE_Y) {
+      hook.tint = 0x6fb8ff
+      hook.alpha = 0.9
+    } else {
+      hook.tint = 0xffffff
+      hook.alpha = 1
+    }
   }
 
   updatePosition()
   app.stage.addChild(rope)
+  hook.zIndex = rope.zIndex + 1
+  app.stage.addChild(hook)
 
   if (app.renderer?.events?.on) {
     app.renderer.events.on("resize", updatePosition)
   }
 
-  return rope
+  return { rope, hook }
 }
 
 const animateClouds = (app, clouds) => {
@@ -298,8 +330,8 @@ export const test = async () => {
 
   drawBackground(app)
   const clouds = drawClouds(app)
-  const { underwaterSprites, boatSprite } = addLoadedImages(app, imageUrls)
-  const fishingLine = createFishingLine(app, boatSprite)
+  const { underwaterSprites, boatSprite, hookSprite } = addLoadedImages(app, imageUrls)
+  createFishingLine(app, boatSprite, hookSprite)
   if (boatSprite) {
     app.stage.addChild(boatSprite)
   }
