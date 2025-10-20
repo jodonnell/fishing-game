@@ -20,17 +20,18 @@ const CLOUD_DEFINITIONS = [
 ]
 
 const IMAGE_DEFINITIONS = [
-  { key: "boot", url: bootImageUrl, position: { x: 220, y: 420 }, scale: 0.085 },
-  { key: "fish", url: fishImageUrl, position: { x: 360, y: 420 }, scale: 0.075 },
-  { key: "hook", url: hookImageUrl, position: { x: 480, y: 420 }, scale: 0.055 },
+  { key: "boot", url: bootImageUrl, scale: 0.085 },
+  { key: "fish", url: fishImageUrl, scale: 0.075 },
+  { key: "hook", url: hookImageUrl, scale: 0.055 },
   {
     key: "manFishing",
     url: manFishingImageUrl,
-    position: { x: 660, y: 150 },
+    aboveWater: true,
+    anchor: { x: 660, y: 150 },
     scale: 0.28,
   },
-  { key: "seaweed", url: seaweedImageUrl, position: { x: 840, y: 420 }, scale: 0.075 },
-  { key: "tuna", url: tunaImageUrl, position: { x: 960, y: 420 }, scale: 0.075 },
+  { key: "seaweed", url: seaweedImageUrl, scale: 0.075 },
+  { key: "tuna", url: tunaImageUrl, scale: 0.075 },
 ]
 
 const IMAGE_URLS = IMAGE_DEFINITIONS.reduce((acc, { key, url }) => {
@@ -49,21 +50,61 @@ const loadAssets = async () => {
   }
 }
 
+const randomBetween = (min, max) => min + Math.random() * (max - min)
+
 const addLoadedImages = (app, imageUrls) => {
   const underwaterSprites = []
+  const placedPositions = []
+  const renderer = app.renderer
+  const width = renderer.width
+  const height = renderer.height
+  const horizontalPadding = Math.min(160, width * 0.12)
+  const verticalMin = WATERLINE_Y + 70
+  const verticalMax = Math.max(verticalMin + 20, height - 140)
+  const minDistance = 160
 
-  IMAGE_DEFINITIONS.forEach(({ key, position, scale }, index) => {
-    const url = imageUrls[key]
-    if (!url) return
+  IMAGE_DEFINITIONS.forEach(({ key, scale, url: assetUrl, aboveWater, anchor }, index) => {
+    const resolvedUrl = imageUrls[key] ?? assetUrl
+    if (!resolvedUrl) return
 
-    const sprite = Sprite.from(url)
+    const sprite = Sprite.from(resolvedUrl)
     sprite.anchor.set(0.5)
     sprite.scale.set(scale ?? DEFAULT_SCALE)
-    sprite.x = position.x
-    sprite.y = position.y
+    let spriteX
+    let spriteY
+    if (aboveWater && anchor) {
+      spriteX = anchor.x
+      spriteY = anchor.y
+    } else {
+      let attempts = 0
+      let found = false
+      while (attempts < 24 && !found) {
+        spriteX = randomBetween(horizontalPadding, Math.max(horizontalPadding + 1, width - horizontalPadding))
+        spriteY = randomBetween(verticalMin, verticalMax)
+        if (
+          placedPositions.every(({ x, y }) => {
+            const dx = x - spriteX
+            const dy = y - spriteY
+            return Math.sqrt(dx * dx + dy * dy) >= minDistance
+          })
+        ) {
+          found = true
+          placedPositions.push({ x: spriteX, y: spriteY })
+        }
+        attempts += 1
+      }
+      if (!found) {
+        spriteX = randomBetween(horizontalPadding, Math.max(horizontalPadding + 1, width - horizontalPadding))
+        spriteY = randomBetween(verticalMin, verticalMax)
+        placedPositions.push({ x: spriteX, y: spriteY })
+      }
+    }
+
+    sprite.x = spriteX
+    sprite.y = spriteY
     sprite.eventMode = "none"
     sprite.baseY = sprite.y
-    if (sprite.y >= WATERLINE_Y) {
+    if (!aboveWater && sprite.y >= WATERLINE_Y) {
       sprite.tint = 0x6fb8ff
       sprite.alpha = 0.88
       sprite.baseAlpha = sprite.alpha
