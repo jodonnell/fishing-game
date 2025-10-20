@@ -13,6 +13,11 @@ const WATER_BOB_AMPLITUDE = 8
 const WATER_BOB_SPEED = 0.002
 const UNDERWATER_ALPHA_VARIANCE = 0.06
 const UNDERWATER_PHASE_OFFSET = 0.6
+const CLOUD_DEFINITIONS = [
+  { x: 140, y: 80, scale: 0.95, speed: 0.02 },
+  { x: 420, y: 60, scale: 1.1, speed: 0.015 },
+  { x: 780, y: 90, scale: 1.25, speed: 0.018 },
+]
 
 const IMAGE_DEFINITIONS = [
   { key: "boot", url: bootImageUrl, position: { x: 220, y: 420 }, scale: 0.085 },
@@ -71,6 +76,72 @@ const addLoadedImages = (app, imageUrls) => {
   return { underwaterSprites }
 }
 
+const drawBackground = (app) => {
+  const background = new Graphics()
+  const redraw = () => {
+    background.clear()
+    const width = app.renderer.width
+    const height = app.renderer.height
+    const skyHeight = Math.max(WATERLINE_Y, 0)
+    const seaHeight = Math.max(height - WATERLINE_Y, 0)
+
+    if (skyHeight > 0) {
+      background.rect(0, 0, width, skyHeight)
+      background.fill({ color: 0x86c5ff, alpha: 1 })
+      background.rect(0, 0, width, skyHeight)
+      background.fill({ color: 0xffffff, alpha: 0.05 })
+    }
+
+    if (seaHeight > 0) {
+      background.rect(0, WATERLINE_Y, width, seaHeight)
+      background.fill({ color: 0x022b51, alpha: 1 })
+    }
+  }
+  redraw()
+  background.eventMode = "none"
+  background.zIndex = -10
+  app.stage.addChild(background)
+  if (app.renderer?.events?.on) {
+    app.renderer.events.on("resize", redraw)
+  }
+  return background
+}
+
+const drawClouds = (app) => {
+  const clouds = CLOUD_DEFINITIONS.map(({ x, y, scale, speed }) => {
+    const cloud = new Graphics()
+    cloud.circle(-40, -6, 28)
+    cloud.circle(-12, -20, 34)
+    cloud.circle(26, -8, 26)
+    cloud.circle(0, 12, 24)
+    cloud.fill({ color: 0xffffff, alpha: 0.9 })
+    cloud.scale.set(scale)
+    cloud.x = x
+    cloud.y = y
+    cloud.speed = speed
+    cloud.alpha = 0.92
+    cloud.eventMode = "none"
+    cloud.zIndex = -5
+    app.stage.addChild(cloud)
+    return cloud
+  })
+
+  const updateWrapBounds = () => {
+    const width = app.renderer.width
+    clouds.forEach((cloud) => {
+      cloud.wrapX = width + 200
+    })
+  }
+
+  updateWrapBounds()
+
+  if (app.renderer?.events?.on) {
+    app.renderer.events.on("resize", updateWrapBounds)
+  }
+
+  return clouds
+}
+
 const drawWaterOverlay = (app) => {
   const overlay = new Graphics()
   const redraw = () => {
@@ -112,6 +183,19 @@ const animateWater = (app, overlay, underwaterSprites) => {
   })
 }
 
+const animateClouds = (app, clouds) => {
+  app.ticker.add((ticker) => {
+    const delta = ticker.deltaMS
+    clouds.forEach((cloud) => {
+      cloud.x += (cloud.speed ?? 0.02) * delta
+      const wrapX = cloud.wrapX ?? app.renderer.width + 200
+      if (cloud.x - 150 > wrapX) {
+        cloud.x = -150
+      }
+    })
+  })
+}
+
 export const test = async () => {
   const app = new Application()
   await app.init({ background: "#000000", resizeTo: window })
@@ -120,7 +204,10 @@ export const test = async () => {
 
   const { imageUrls } = await loadAssets()
 
+  drawBackground(app)
+  const clouds = drawClouds(app)
   const { underwaterSprites } = addLoadedImages(app, imageUrls)
   const waterOverlay = drawWaterOverlay(app)
   animateWater(app, waterOverlay, underwaterSprites)
+  animateClouds(app, clouds)
 }
